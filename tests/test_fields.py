@@ -56,9 +56,12 @@ class PolymorphicTypeFieldTests(TestCase):
         remote_field.limit_choices_to = extra_limit_choices_to
         # Cache should be cleared
         self.assertNotIn('limit_choices_to', remote_field.__dict__)
+        remote_field_limit_choices_to = remote_field.limit_choices_to
+        self.assertEqual(remote_field_limit_choices_to.connector, Q.AND)
+        self.assertFalse(remote_field_limit_choices_to.negated)
         self.assertEqual(
-            remote_field.limit_choices_to,
-            dict(extra_limit_choices_to, **limit_choices_to)
+            remote_field_limit_choices_to.children,
+            list(extra_limit_choices_to.items()) + limit_choices_to.children
         )
 
         # Make sure it works with existing Q `limit_choices_to`
@@ -70,7 +73,7 @@ class PolymorphicTypeFieldTests(TestCase):
         self.assertFalse(remote_field_limit_choices_to.negated)
         self.assertEqual(
             remote_field_limit_choices_to.children,
-            list(extra_limit_choices_to.items()) + list(limit_choices_to.items())
+            list(extra_limit_choices_to.items()) + limit_choices_to.children
         )
 
         # Re-assign the original value

@@ -63,16 +63,30 @@ class SubclassAccessors(defaultdict):
         return accessors
 
 
-class BasePolymorphicModel(models.Model):
+class AbstractPolymorphicModel(models.Model):
     class Meta:
         abstract = True
 
     subclass_accessors = SubclassAccessors()
 
+    def get_type(self):
+        raise NotImplementedError
+
+    def set_type(self):
+        raise NotImplementedError
+
+    @classmethod
+    def get_subclasses_filter(cls, *subclasses, **kwargs):
+        raise NotImplementedError
+
+    def save(self, *args, **kwargs):
+        if self.pk is None:
+            self.set_type()
+        return super(AbstractPolymorphicModel, self).save(*args, **kwargs)
+
     def type_cast(self, to=None):
         if to is None:
-            content_type_id = getattr(self, "%s_id" % self.CONTENT_TYPE_FIELD)
-            to = ContentType.objects.get_for_id(content_type_id).model_class()
+            to = self.get_type()
         attrs, proxy, _lookup = self.subclass_accessors[to]
         # Cast to the right concrete model by going up in the
         # SingleRelatedObjectDescriptor chain
@@ -84,27 +98,28 @@ class BasePolymorphicModel(models.Model):
             type_casted = copy_fields(type_casted, proxy)
         return type_casted
 
-    def save(self, *args, **kwargs):
-        if self.pk is None:
-            content_type = get_content_type(self.__class__)
-            setattr(self, self.CONTENT_TYPE_FIELD, content_type)
-        return super(BasePolymorphicModel, self).save(*args, **kwargs)
+
+class BasePolymorphicModel(AbstractPolymorphicModel):
+    class Meta:
+        abstract = True
+
+    def get_type(self):
+        content_type_id = getattr(self, "%s_id" % self.CONTENT_TYPE_FIELD)
+        return ContentType.objects.get_for_id(content_type_id).model_class()
+
+    def set_type(self):
+        content_type = get_content_type(self.__class__)
+        setattr(self, self.CONTENT_TYPE_FIELD, content_type)
 
     @classmethod
-    def content_type_lookup(cls, *models, **kwargs):
-        query_name = kwargs.pop('query_name', None) or cls.CONTENT_TYPE_FIELD
-        if models:
-            query_name = "%s__in" % query_name
-            value = set(ct.pk for ct in get_content_types(*models).values())
-        else:
-            value = get_content_type(cls).pk
-        return {query_name: value}
-
-    @classmethod
-    def subclasses_lookup(cls, query_name=None):
-        return cls.content_type_lookup(
-            cls, *tuple(cls.subclass_accessors), query_name=query_name
+    def get_subclasses_filter(cls, *subclasses, **kwargs):
+        if not subclasses:
+            subclasses = set(cls.subclass_accessors)
+        query_name = "%s__in" % (
+            kwargs.pop('query_name', None) or cls.CONTENT_TYPE_FIELD
         )
+        value = set(ct.pk for ct in get_content_types(*subclasses).values())
+        return models.Q(**{query_name: value})
 
     @classmethod
     def check(cls, **kwargs):

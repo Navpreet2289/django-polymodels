@@ -23,9 +23,7 @@ class PolymorphicQuerySet(models.query.QuerySet):
                 related = accessors[subclass][2]
                 if related:
                     relateds.add(related)
-            queryset = self.filter(
-                **self.model.content_type_lookup(*tuple(subclasses))
-            )
+            queryset = self.filter(self.model.get_subclasses_filter(*tuple(subclasses)))
         else:
             # Collect all `select_related` required relateds
             for accessor in accessors.values():
@@ -39,7 +37,7 @@ class PolymorphicQuerySet(models.query.QuerySet):
         return queryset
 
     def exclude_subclasses(self):
-        return self.filter(**self.model.content_type_lookup())
+        return self.filter(self.model.get_subclasses_filter(self.model))
 
     def _clone(self, *args, **kwargs):
         kwargs.update(type_cast=getattr(self, 'type_cast', False))
@@ -75,5 +73,5 @@ class PolymorphicManager(models.Manager.from_queryset(PolymorphicQuerySet)):
         opts = model._meta
         if opts.proxy:
             # Select only associated model and its subclasses.
-            queryset = queryset.filter(**self.model.subclasses_lookup())
+            queryset = queryset.filter(self.model.get_subclasses_filter())
         return queryset

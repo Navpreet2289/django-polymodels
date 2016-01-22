@@ -25,14 +25,14 @@ class PolymorphicManyToOneRel(ManyToOneRel):
 
     @property
     def limit_choices_to(self):
-        subclasses_lookup = self.polymorphic_type.subclasses_lookup('pk')
+        subclasses_filter = self.polymorphic_type.get_subclasses_filter(query_name='pk')
         limit_choices_to = self._limit_choices_to
         if limit_choices_to is None:
-            limit_choices_to = subclasses_lookup
+            limit_choices_to = subclasses_filter
         elif isinstance(limit_choices_to, dict):
-            limit_choices_to = dict(limit_choices_to, **subclasses_lookup)
+            limit_choices_to = Q(**limit_choices_to) & subclasses_filter
         elif isinstance(limit_choices_to, Q):
-            limit_choices_to = limit_choices_to & Q(**subclasses_lookup)
+            limit_choices_to = limit_choices_to & subclasses_filter
         self.__dict__['limit_choices_to'] = limit_choices_to
         return limit_choices_to
 
